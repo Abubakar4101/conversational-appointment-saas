@@ -91,11 +91,6 @@ Instead of just "chatting," I trained the AI (via prompts) to behave like a data
 
 For a detailed API reference, see the [API Reference](API_REFERENCE.md) document.
 
----
-
-## 📝 API Reference
-
-For a detailed API reference, see the [API Reference](API_REFERENCE.md) document.
 
 ---
 
