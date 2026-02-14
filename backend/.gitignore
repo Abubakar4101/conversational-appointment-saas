@@ -13,3 +13,4 @@ logs/
 coverage/
 dist/
 build/
+postman_collection.json

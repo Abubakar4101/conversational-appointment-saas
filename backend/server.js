@@ -71,7 +71,7 @@ app.use('*', (req, res) => {
 // ERROR HANDLING
 // ============================================
 
-// Global error handler (must be last)
+// Global error handler
 app.use(errorHandler);
 
 // ============================================

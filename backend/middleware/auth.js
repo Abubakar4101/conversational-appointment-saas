@@ -1,5 +1,5 @@
 const { verifyToken } = require('../config/auth');
-const { AuthenticationError } = require('../utils/errorHandler');
+const { AuthenticationError, AuthorizationError } = require('../utils/errorHandler');
 const { query } = require('../config/database');
 
 /**
@@ -44,33 +44,6 @@ const authenticate = async (req, res, next) => {
 };
 
 /**
- * Optional authentication middleware (doesn't fail if no token)
- */
-const optionalAuth = async (req, res, next) => {
-    try {
-        const authHeader = req.headers.authorization;
-
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            const decoded = verifyToken(token);
-
-            const result = await query(
-                'SELECT id, email, name, role, business_id, is_active FROM users WHERE id = $1',
-                [decoded.userId]
-            );
-
-            if (result.rows.length > 0 && result.rows[0].is_active) {
-                req.user = result.rows[0];
-            }
-        }
-        next();
-    } catch (error) {
-        // Don't fail, just continue without user
-        next();
-    }
-};
-
-/**
  * Role-based authorization middleware
  */
 const authorize = (...roles) => {
@@ -89,6 +62,5 @@ const authorize = (...roles) => {
 
 module.exports = {
     authenticate,
-    optionalAuth,
     authorize,
 };

@@ -1,144 +1,102 @@
-# AI Appointment Platform - Architect-Level Backend API
+# AI Appointment Platform - Senior Full Stack Implementation
 
-> A production-grade, multi-tenant AI-assisted appointment booking system built with **Node.js, Express, PostgreSQL**, and **Mistral AI**. Designed for robustness, scalability, and developer experience.
+This project is a solid, end-to-end system for booking appointments using AI. Instead of a simple CRUD app, I’ve built it with a **SaaS-first mindset**, focusing on data integrity, security, and a smooth user experience.
 
 ---
 
-## 🏗️ High-Level Architecture
+## 🏗️ The Big Picture (Architecture)
 
-The system follows a **Layered Architecture** (Clean Architecture principles) to ensure separation of concerns and testability.
+I used a **Layered Architecture** to keep the code clean and easy to test. Every part of the app has a specific job:
 
-### System Overview
-```mermaid
-graph TD
-    Client[React Frontend] -->|REST API/JWT| API[Express Gateway]
-    
-    subgraph "Application Layer (Backend)"
-        API --> Middleware[Middleware Stack: Auth, Rate Limiting, Validation]
-        Middleware --> Controllers[Controllers: Req/Res Handling]
-        Controllers --> Services[Services: Business Logic & Orchestration]
-    end
-
-    subgraph "External Providers"
-        Services --> Mistral[Mistral AI Service]
-        Services --> DB[(PostgreSQL Database)]
-    end
-```
+<img src="assets//architecture/high-level.svg" width="700" />
 
 ### Layered Structure
-- **Routes Layer**: Handles HTTP entry points and mounts middleware.
-- **Middleware Layer**: Enforces security (JWT), rate limiting, and input validation.
-- **Controller Layer**: Decouples HTTP concerns from business logic.
-- **Service Layer**: Contains core business rules, AI logic, and database orchestration.
-- **Database Layer**: Implements multi-tenancy, soft deletes, and conflict prevention at the schema level.
+- **Middleware Layer**: Enforces security (JWT), rate limiting, and input validation before requests reach logic.
+- **Application Layer**: Contains **Controllers** for request handling and **Services** for core business rules and AI orchestration.
+- **Centralized Error Handling**: A unified system to catch and format all errors consistently across the API.
+- **Infrastructure Layer**: Handles data persistence with **PostgreSQL (Supabase)** and AI capabilities with **Mistral AI**.
 
 ---
 
-## 🚀 How to Run Locally
+## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js**: ≥ 18.x
-- **PostgreSQL**: ≥ 14.x
-- **API Key**: Mistral AI (Free tier at [console.mistral.ai](https://console.mistral.ai))
+- **Node.js** (v18 or higher)
+- **Postgres** (Running locally or on the cloud)
+- **Mistral API Key** (You can get a free one at [console.mistral.ai](https://console.mistral.ai))
 
 ### 1. Database Setup
 ```bash
-# Connect to psql
-psql -U postgres
+# Create the database
+psql -U postgres -c "CREATE DATABASE appointment_platform;"
 
-# Create database
-CREATE DATABASE appointment_platform;
-\q
-
-# Run schema and seed
+# Run the schema (tables) and sample data
 psql -U postgres -d appointment_platform -f database/schema.sql
 psql -U postgres -d appointment_platform -f database/seed.sql
 ```
 
-### 2. Environment Configuration
+### 2. Environment Setup
 Create a `.env` file in the `backend` folder:
+
 ```env
 PORT=3000
 DB_HOST=localhost
-DB_PORT=5432
 DB_NAME=appointment_platform
 DB_USER=postgres
 DB_PASSWORD=your_password
-JWT_SECRET=your_generated_random_secret
-MISTRAL_API_KEY=your_mistral_api_key
+JWT_SECRET=pick_a_random_string
+MISTRAL_API_KEY=your_key_here
 ```
 
-### 3. Installation & Execution
+### 3. Run the App
 ```bash
 npm install
 npm run dev
 ```
-The server will start on `http://localhost:3000`. Test the health at `/health`.
+The API will be live at `http://localhost:3000`.
 
 ---
 
-## 💎 Architect-Level Design Decisions
+## 💎 Key Features & Senior-Level Decisions
 
-### 1. Multi-Tenancy & Referential Integrity
-**Decision**: Implementing a dedicated `businesses` table instead of just a raw ID string.
-- **Rationale**: Enforces referential integrity. All `users`, `appointments`, and `chat_sessions` link to a real business entity.
-- **Benefit**: Supports SaaS-level scaling, business-specific settings (timezones, hours), and proper data isolation.
+### 1. Multi-Tenancy (Built for Scale)
+I didn't just add a `business_id` column. I created a proper `businesses` table. This means the app can support multiple companies (SaaS style) while keeping their data completely separate and safe.
 
-### 2. Database-Level Race Condition Protection
-**Decision**: A **Unique Partial Index** (`idx_unique_appointment_slot`) on `(business_id, date, time)`.
-- **Rationale**: Application-level checks are prone to race conditions under high concurrency.
-- **Benefit**: The database guarantees that no two active appointments can double-book the same slot, even if requests arrive milliseconds apart.
+### 2. No More Double-Bookings
+Race conditions are a common problem in booking apps. I solved this at the database level using a **Unique Partial Index**. Even if two people click "Book" at the exact same millisecond, the database will only allow one, preventing any messy overlaps.
 
-### 3. Soft Delete Strategy (Auditability)
-**Decision**: Implementing `deleted_at` timestamps instead of hard `DELETE`.
-- **Rationale**: Essential for production systems to provide an audit trail and accidental recovery.
-- **Benefit**: Retains data for analytics while excluding it from active business logic via filtered indexes.
+### 3. Soft Deletes (Safety First)
+In a real-world app, deleting data permanently is risky. I used a `deleted_at` strategy. This keeps an audit trail for the business and allows us to recover data if a user deletes something by mistake.
 
-### 4. Layered Validation Strategy
-**Decision**: Relaxed DB constraints combined with strict Backend validation.
-- **Rationale**: DB constraints (`CHECK`) can be too brittle for timezones or migrations. 
-- **Benefit**: DB enforces "reasonable" data (e.g., within 1 day of today), while Backend logic enforces strict business rules for users.
+### 4. Smart AI Integration
+Instead of just "chatting," I trained the AI (via prompts) to behave like a data extractor. It identifies dates, times, and services from messy user messages and turns them into clean data our system can use.
 
 ---
 
-## ⚖️ Tradeoffs & Considerations
+## ⚖️ Tradeoffs (Real-world Thinking)
 
-| Feature | Decision | Tradeoff |
-|---------|----------|----------|
-| **Data Storage** | Date + Time Columns | Easier for reporting, but requires manual handling for overlaps compared to a single `TIMESTAMP`. |
-| **AI Strategy** | Direct REST Integration | Low overhead and simple, but lacks the "agentic" memory of more complex frameworks (managed via JSONB context). |
-| **Concurrency** | Unique Indices | Fast and robust, but restricts appointments to exact slots (no duration overlaps yet). |
+- **Date/Time Handling**: I used separate columns for Date and Time to make it easier for business owners to run daily reports. While Timestamps are powerful, this split is much more human-readable for an MVP.
+- **AI Latency**: AI takes a second to think. To keep the UX good, I implemented "Loading" states on the frontend so the user never feels like the app is stuck.
 
 ---
 
-## 📝 Assumptions & Known Limitations
+## 📝 Known Limitations
 
-### Assumptions
-1. **Fixed Slots**: Appointments are assumed to be fixed durations for the conflict detection logic (defaulting to 60 mins).
-2. **Single Business**: Users are associated with one business at a time (multi-tenant but not cross-tenant).
-3. **UTC Foundation**: Server assumes UTC; timezone handling is business-level.
-
-### Limitations
-- **No Real-Time**: Communication is via standard REST. For high-volume chat, WebSockets/SSE should be implemented.
-- **Manual Overlap**: Conflict detection simplifies to exact time matches. Future versions should use PostgreSQL `tsrange` for overlap detection.
-- **Mistral Latency**: AI response time depends on the provider; local caching of common intents is a potential future optimization.
+- **WebSockets**: Currently uses standard REST. For a high-traffic chat, I'd upgrade this to WebSockets for real-time speed.
+- **Fixed Durations**: Right now, all appointments are 60 minutes. Adding variable durations would be my next step.
 
 ---
 
-## 🛠️ Testing with Postman
+## 📝 API Reference
 
-We have provided a standalone Postman collection for immediate testing:
-1. Import `postman_collection.json` into Postman.
-2. Run the **Auth > Login** request (it automatically sets the `{{token}}` variable).
-3. Use the **Chat** and **Appointments** folders to test the end-to-end flow.
+For a detailed API reference, see the [API Reference](API_REFERENCE.md) document.
 
 ---
 
-## 📄 Key Artifacts
-- [Database Schema](./database/schema.sql) - Production DDL with detailed performance notes.
-- [Interview Q&A](./INTERVIEW_QA.md) - Deep dive into technical questions.
-- [Architectural Guide](./ARCHITECT_LEVEL_IMPROVEMENTS.md) - Detailed rationale for elite-level decisions.
+## 📝 API Reference
+
+For a detailed API reference, see the [API Reference](API_REFERENCE.md) document.
 
 ---
 
-**Built with pride for the Technical Skills Assessment.**
+**Built for the Spark AI Technical Assessment.**
