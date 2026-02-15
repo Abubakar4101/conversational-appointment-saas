@@ -1,4 +1,4 @@
-# AI Appointment Platform - Premium Frontend 🎨
+# AI Appointment Platform - Frontend
 
 The frontend for the AI Appointment Platform is built for a **high-end, professional experience**. It combines cutting-edge tools with custom design patterns to deliver a "WOW" factor for users booking appointments via AI.
 
@@ -49,11 +49,12 @@ Instead of generic colors, the UI uses a curated dark palette with:
    ```bash
    npm install
    ```
-3. Start the development server:
+3. Copy the `.env.example` file to `.env`
+4. Start the development server:
    ```bash
    npm run dev
    ```
-4. Open [http://localhost:5173](http://localhost:5173).
+5. Open [http://localhost:5173](http://localhost:5173).
 
 ---
 
