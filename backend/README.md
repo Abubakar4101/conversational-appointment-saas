@@ -1,4 +1,4 @@
-# AI Appointment Platform - Senior Full Stack Implementation
+# AI Appointment Platform - Backend
 
 This project is a solid, end-to-end system for booking appointments using AI. Instead of a simple CRUD app, I’ve built it with a **SaaS-first mindset**, focusing on data integrity, security, and a smooth user experience.
 
@@ -37,6 +37,7 @@ psql -U postgres -d appointment_platform -f database/seed.sql
 
 ### 2. Environment Setup
 Create a `.env` file in the `backend` folder:
+cp .env.example .env
 
 ```env
 PORT=3000

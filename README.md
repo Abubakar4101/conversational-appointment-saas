@@ -1,4 +1,4 @@
-# AI Appointment Platform (Monorepo) 🚀
+# AI Appointment Platform 🚀
 
 Welcome to the **AI Appointment Platform**, a production-grade SaaS-ready application that allows users to book appointments through a conversational AI interface. This project highlights premium full-stack development, intelligent AI integration with Mistral, and a stunning, responsive UX.
 
@@ -56,7 +56,7 @@ Leverages **Mistral AI** to extract intent, service types, dates, and times from
 
 ### 📊 Sophisticated Dashboard
 - **Server-Side Search**: Multi-term search on services and notes using PostgreSQL `ILIKE`.
-- **Intelligent Filtering**: Real-time status updates and analytics counters.
+- **Intelligent Filtering**: updates and analytics counters.
 - **Interactive Cards**: Clickable appointment cards with cross-navigation to the original AI chat session.
 
 ### 🛡️ Enterprise-Grade Architecture
