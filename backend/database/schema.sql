@@ -62,6 +62,37 @@ CREATE INDEX idx_users_business_id ON users(business_id);
 CREATE INDEX idx_users_created_at ON users(created_at DESC);
 
 -- ============================================
+-- CHAT SESSIONS TABLE
+-- ============================================
+-- Stores conversation sessions between users and AI
+CREATE TABLE chat_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    business_id UUID REFERENCES businesses(id) ON DELETE CASCADE, -- Multi-tenancy with referential integrity
+    title VARCHAR(255) DEFAULT 'New Conversation',
+    status VARCHAR(50) DEFAULT 'active', -- active, completed, abandoned
+    context JSONB, -- Stores conversation context, extracted entities, etc.
+    appointment_created BOOLEAN DEFAULT false,
+    appointment_id UUID, -- Reference to appointment (FK added via ALTER TABLE later)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Constraints
+    CONSTRAINT status_valid CHECK (status IN ('active', 'completed', 'abandoned'))
+);
+
+-- Indexes for chat_sessions table
+CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
+CREATE INDEX idx_chat_sessions_business_id ON chat_sessions(business_id);
+CREATE INDEX idx_chat_sessions_status ON chat_sessions(status);
+CREATE INDEX idx_chat_sessions_created_at ON chat_sessions(created_at DESC);
+CREATE INDEX idx_chat_sessions_appointment ON chat_sessions(appointment_id);
+
+-- GIN index for JSONB context field for efficient JSON queries
+CREATE INDEX idx_chat_sessions_context ON chat_sessions USING GIN(context);
+
+-- ============================================
 -- APPOINTMENTS TABLE
 -- ============================================
 -- Stores appointment scheduling data with status tracking
@@ -77,7 +108,7 @@ CREATE TABLE appointments (
     notes TEXT,
     cancellation_reason TEXT,
     created_via VARCHAR(50) DEFAULT 'manual', -- manual, ai_chat, api
-    chat_session_id UUID, -- Reference to chat session if booked via AI
+    chat_session_id UUID REFERENCES chat_sessions(id) ON DELETE SET NULL, -- ⭐ Referencing chat_sessions directly
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     confirmed_at TIMESTAMP WITH TIME ZONE,
@@ -113,37 +144,6 @@ CREATE INDEX idx_appointments_user_upcoming ON appointments(user_id, appointment
 CREATE UNIQUE INDEX idx_unique_appointment_slot 
 ON appointments(business_id, appointment_date, appointment_time)
 WHERE status NOT IN ('cancelled') AND deleted_at IS NULL;
-
--- ============================================
--- CHAT SESSIONS TABLE
--- ============================================
--- Stores conversation sessions between users and AI
-CREATE TABLE chat_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    business_id UUID REFERENCES businesses(id) ON DELETE CASCADE, -- Multi-tenancy with referential integrity
-    title VARCHAR(255) DEFAULT 'New Conversation',
-    status VARCHAR(50) DEFAULT 'active', -- active, completed, abandoned
-    context JSONB, -- Stores conversation context, extracted entities, etc.
-    appointment_created BOOLEAN DEFAULT false,
-    appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    
-    -- Constraints
-    CONSTRAINT status_valid CHECK (status IN ('active', 'completed', 'abandoned'))
-);
-
--- Indexes for chat_sessions table
-CREATE INDEX idx_chat_sessions_user_id ON chat_sessions(user_id);
-CREATE INDEX idx_chat_sessions_business_id ON chat_sessions(business_id);
-CREATE INDEX idx_chat_sessions_status ON chat_sessions(status);
-CREATE INDEX idx_chat_sessions_created_at ON chat_sessions(created_at DESC);
-CREATE INDEX idx_chat_sessions_appointment ON chat_sessions(appointment_id);
-
--- GIN index for JSONB context field for efficient JSON queries
-CREATE INDEX idx_chat_sessions_context ON chat_sessions USING GIN(context);
 
 -- ============================================
 -- CHAT MESSAGES TABLE
@@ -200,6 +200,16 @@ CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
+-- CIRCULAR REFERENCE CONSTRAINTS
+-- ============================================
+
+-- Link chat_sessions back to the resulting appointment
+ALTER TABLE chat_sessions 
+ADD CONSTRAINT fk_chat_sessions_appointment 
+FOREIGN KEY (appointment_id) REFERENCES appointments(id) 
+ON DELETE SET NULL;
+
+-- ============================================
 -- PERFORMANCE CONSIDERATIONS & NOTES
 -- ============================================
 
@@ -237,46 +247,6 @@ CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions
 --    - Current: Separate DATE and TIME columns
 --    - Pros: Simple to understand, easy date-only queries
 --    - Cons: Overlap detection more complex, timezone handling manual
---    - Enterprise Alternative: Use TIMESTAMP range (start_at, end_at)
---      * Simpler overlap detection: WHERE tsrange(start_at, end_at) && tsrange($1, $2)
---      * Better timezone support
---      * Native PostgreSQL range types
---    - Decision: Kept simple for assessment, documented tradeoff
-
--- 6. DATE CONSTRAINT RELAXATION:
---    - Changed from: appointment_date >= CURRENT_DATE
---    - To: appointment_date >= CURRENT_DATE - INTERVAL '1 day'
---    - Reason: Handles timezone edge cases, back-office bookings, data migrations
---    - Backend validation still enforces future dates for user-facing bookings
-
--- 7. SCALABILITY CONSIDERATIONS:
---    - UUID primary keys prevent ID enumeration attacks
---    - Timestamps with timezone for global deployment
---    - JSONB for flexible schema evolution without migrations
---    - Partitioning strategy (future): Partition appointments by date range
---    - Archival strategy (future): Move old soft-deleted appointments to archive table
-
--- 8. DATA INTEGRITY (PRODUCTION-READY):
---    - Foreign key constraints with ON DELETE CASCADE
---    - CHECK constraints validate data at database level
---    - NOT NULL constraints prevent incomplete data
---    - Unique constraints prevent duplicates
---    - Triggers maintain timestamp consistency
-
--- 9. QUERY OPTIMIZATION:
---    - Composite indexes reduce query execution time
---    - Partial indexes (WHERE clause) for specific use cases
---    - EXPLAIN ANALYZE recommended for slow queries
---    - Consider materialized views for complex reporting
---    - Index on updated_at for "recently modified" queries
-
--- 10. FUTURE ENHANCEMENTS:
---    - Add full-text search on appointment notes
---    - Add audit trail table for compliance
---    - Implement database-level encryption for sensitive data
---    - Add availability/schedule table for staff scheduling
---    - Implement TIMESTAMP range types for appointments
---    - Add row-level security (RLS) for multi-tenancy isolation
 
 -- ============================================
 -- SAMPLE QUERIES FOR COMMON OPERATIONS
@@ -293,13 +263,6 @@ CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions
 -- LEFT JOIN chat_messages cm ON cs.id = cm.session_id
 -- WHERE cs.id = $1
 -- GROUP BY cs.id;
-
--- Check appointment conflicts:
--- SELECT * FROM appointments
--- WHERE business_id = $1 
--- AND appointment_date = $2 
--- AND appointment_time = $3
--- AND status NOT IN ('cancelled', 'completed');
 
 -- Business analytics (appointments per day):
 -- SELECT appointment_date, COUNT(*) as total_appointments

@@ -72,64 +72,14 @@ const sendMessage = asyncHandler(async (req, res) => {
     // Verify session ownership
     await chatService.getSessionById(sessionId, userId);
 
-    // Save user message
-    await chatService.addMessage(sessionId, 'user', message);
-
-    // Get conversation history
-    const conversationHistory = await chatService.getConversationHistory(sessionId);
-
-    // Generate AI response
-    const aiResponse = await aiService.generateChatResponse(conversationHistory);
-
-    // Save AI response
-    await chatService.addMessage(
-        sessionId,
-        'assistant',
-        aiResponse.content,
-        aiResponse.metadata
-    );
-
-    // Try to extract appointment details
-    let appointmentDetails = null;
-    try {
-        const extracted = await aiService.extractAppointmentDetails(conversationHistory);
-
-        if (extracted.has_booking_intent) {
-            appointmentDetails = {
-                service_type: extracted.service_type,
-                appointment_date: extracted.appointment_date,
-                appointment_time: extracted.appointment_time,
-                notes: extracted.notes,
-                is_complete: extracted.is_complete,
-            };
-
-            // Update session context with extracted details
-            await chatService.updateSessionContext(sessionId, {
-                extracted_details: appointmentDetails,
-                last_extraction: new Date().toISOString(),
-            });
-        }
-    } catch (extractionError) {
-        logger.warn('Failed to extract appointment details', {
-            sessionId,
-            error: extractionError.message,
-        });
-    }
-
-    logger.info('Chat message processed', {
-        sessionId,
-        userId,
-        hasAppointmentDetails: !!appointmentDetails,
-    });
+    // Process message through service (handles storage, AI, and extraction)
+    const result = await chatService.processMessage(sessionId, message);
 
     res.status(200).json({
         status: 'success',
         data: {
-            message: {
-                role: 'assistant',
-                content: aiResponse.content,
-            },
-            appointmentDetails,
+            message: result.aiMessage,
+            appointmentDetails: result.appointmentDetails,
         },
     });
 });
