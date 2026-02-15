@@ -31,6 +31,12 @@ const createAppointment = asyncHandler(async (req, res) => {
             chat_session_id,
             `${service_type} - ${appointment_date}`
         );
+        // Add a final confirmation message from the AI
+        await chatService.addMessage(
+            chat_session_id,
+            'assistant',
+            `Perfect! I've booked your ${service_type} for ${appointment_date} at ${appointment_time.slice(0, 5)}. You can see it in your dashboard.`
+        );
     }
 
     logger.info('Appointment created', {
@@ -68,6 +74,7 @@ const getAppointments = asyncHandler(async (req, res) => {
         if (status) filters.status = status;
         if (from_date) filters.from_date = from_date;
         if (to_date) filters.to_date = to_date;
+        if (req.query.search) filters.search = req.query.search;
 
         appointments = await appointmentService.getUserAppointments(userId, filters);
     }
@@ -108,11 +115,10 @@ const updateAppointment = asyncHandler(async (req, res) => {
     const userId = req.user.id;
     const { status, cancellation_reason } = req.body;
 
-    const appointment = await appointmentService.updateAppointmentStatus(
+    const appointment = await appointmentService.updateAppointment(
         id,
         userId,
-        status,
-        cancellation_reason
+        req.body
     );
 
     logger.info('Appointment status updated', {
@@ -138,7 +144,7 @@ const deleteAppointment = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    const appointment = await appointmentService.deleteAppointment(id, userId);
+    const appointment = await appointmentService.removeAppointment(id, userId);
 
     logger.info('Appointment cancelled', {
         appointmentId: id,

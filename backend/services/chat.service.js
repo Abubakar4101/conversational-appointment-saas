@@ -67,7 +67,6 @@ const getSessionWithMessages = async (sessionId, userId) => {
      ORDER BY created_at ASC`,
         [sessionId]
     );
-
     return {
         ...session,
         messages: messagesResult.rows,
@@ -154,6 +153,65 @@ const updateSessionStatus = async (sessionId, status) => {
     );
 };
 
+const aiService = require('./ai.service');
+const logger = require('../utils/logger');
+
+/**
+ * Process a message: Save, Get AI Response, Save Response, and Extract Details
+ * This centralizes the "proper flow" of the chat interaction.
+ */
+const processMessage = async (sessionId, message) => {
+    // 1. Save user message
+    await addMessage(sessionId, 'user', message);
+    // 2. Get conversation history
+    const conversationHistory = await getConversationHistory(sessionId);
+    // 3. Generate AI response
+    const aiResponse = await aiService.generateChatResponse(conversationHistory);
+    // 4. Save AI response
+    const aiMessage = await addMessage(
+        sessionId,
+        'assistant',
+        aiResponse.content,
+        aiResponse.metadata
+    );
+
+    // 5. Try to extract appointment details (uses the updated history)
+    let appointmentDetails = null;
+    try {
+        // We include the assistant's last message for context in extraction
+        const updatedHistory = [...conversationHistory, { role: 'assistant', content: aiResponse.content }];
+        const extracted = await aiService.extractAppointmentDetails(updatedHistory);
+        if (extracted.has_booking_intent) {
+            appointmentDetails = {
+                service_type: extracted.service_type,
+                appointment_date: extracted.appointment_date,
+                appointment_time: extracted.appointment_time,
+                notes: extracted.notes,
+                is_complete: extracted.is_complete,
+            };
+
+            // Update session context with extracted details
+            await updateSessionContext(sessionId, {
+                extracted_details: appointmentDetails,
+                last_extraction: new Date().toISOString(),
+            });
+        }
+    } catch (extractionError) {
+        logger.warn('Failed to extract appointment details in processMessage', {
+            sessionId,
+            error: extractionError.message,
+        });
+    }
+
+    return {
+        aiMessage: {
+            role: 'assistant',
+            content: aiResponse.content,
+        },
+        appointmentDetails,
+    };
+};
+
 module.exports = {
     createSession,
     getUserSessions,
@@ -165,4 +223,5 @@ module.exports = {
     updateSessionTitle,
     completeSession,
     updateSessionStatus,
+    processMessage,
 };
